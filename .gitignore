@@ -1,0 +1,7 @@
+#MacOSX
+.DS_Store
+
+#IDEs
+.vscode
+.atom
+.idea
