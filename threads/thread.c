@@ -298,7 +298,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, priority_cmp, NULL);
+  /* list_insert_ordered (&ready_list, &t->elem, priority_cmp, NULL); */
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -436,7 +437,9 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, priority_cmp, NULL);
+    /* list_insert_ordered (&ready_list, &cur->elem, priority_cmp, NULL); */
+    list_push_back (&ready_list, &cur->elem);
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -499,16 +502,14 @@ thread_set_priority (int new_priority)
     thread_yield ();
 }
 
-/* Returns the current thread's priority. */
+/* Returns the current thread's effective priority. */
 int
 thread_get_priority (void) 
 {
-  //return thread_current ()->priority;
   return thread_get_effective_priority (thread_current ());
 }
 
-/* TODO::
-   Return effective priroty (after donation). */
+/* Returns effective priroty of the thread (after donation). */
 int
 thread_get_effective_priority (struct thread *t)
 {
