@@ -123,6 +123,7 @@ void thread_block (void);
 void thread_unblock (struct thread *);
 
 void thread_block_till (int64_t);
+void thread_set_next_wakeup ();
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
