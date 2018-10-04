@@ -484,7 +484,14 @@ thread_priority_restore()
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current ();
+  int cur_priority = t->priority;
+
+  /* Thread must yield to higher priority thread if it exists, whenever its
+     own priority decreases. */
+  t->priority = new_priority;
+  if(new_priority < cur_priority)
+    thread_yield ();
 }
 
 /* Returns the current thread's priority. */
