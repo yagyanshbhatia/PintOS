@@ -339,6 +339,31 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* TODO::*/
+/* There is scope of modularizing this code by making getter and setter
+functions for old_priority */
+
+/* Temporarily increases the priority of the running thread to PRI_MAX,
+after which it might want to change a locked resource and the thread
+wants that change to happen in minimum number of reschduling ticks, while not
+blocking interrupts so that other threads can also be scheduled in between */
+void
+thread_priority_temporarily_up()
+{
+    struct thread *t = thread_current ();
+    t->old_priority = t->priority;
+    thread_set_priority(PRI_MAX);
+}
+
+/* Restores the old priority of a thread which would have sometime increased
+its priority temporarily */
+void
+thread_priority_restore()
+{
+    struct thread *t = thread_current ();
+    thread_set_priority(t->old_priority);
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -468,6 +493,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->old_priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
