@@ -306,6 +306,24 @@ cond_wait (struct condition *cond, struct lock *lock)
   lock_acquire (lock);
 }
 
+/* Comparision function used for getting the semaphore element corresponding 
+   to highest priority in condition wait list. */
+bool
+cond_cmp (struct list_elem *a, struct list_elem *b, void *aux)
+{
+  struct semaphore_elem *ma = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *mb = list_entry (b, struct semaphore_elem, elem);
+
+  struct list_elem *la = list_front (&(ma->semaphore.waiters));
+  struct list_elem *lb = list_front (&(mb->semaphore.waiters));
+
+  struct thread *ta = list_entry (la, struct thread, elem);
+  struct thread *tb = list_entry (lb, struct thread, elem);
+
+  return thread_get_effective_priority (ta) >
+    thread_get_effective_priority (tb);
+}
+
 /* If any threads are waiting on COND (protected by LOCK), then
    this function signals one of them to wake up from its wait.
    LOCK must be held before calling this function.
@@ -321,9 +339,23 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters))
+  {
+    /*
+      Get the semaphore element that has the highest priority thread waiting 
+      for it. 
+     */
+    struct list_elem *m = list_min (&cond->waiters, cond_cmp, NULL);
+    list_remove (m);
+    sema_up (&(list_entry (m, struct semaphore_elem, elem)->semaphore));
+
+    /* The following is avoided wince it is computationally expensive.*/
+    /*
+      list_sort (&cond->waiters, cond_cmp, NULL);
+      sema_up (&list_entry (list_pop_front (&cond->waiters),
+      struct semaphore_elem, elem)->semaphore);
+    */
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
