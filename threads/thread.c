@@ -503,7 +503,8 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  //return thread_current ()->priority;
+  return thread_get_effective_priority (thread_current ());
 }
 
 /* TODO::
@@ -511,7 +512,34 @@ thread_get_priority (void)
 int
 thread_get_effective_priority (struct thread *t)
 {
-  return t->priority;
+  if(!list_empty (&t->locks_acquired))
+  {
+    int max_priority = t->priority;
+    for (struct list_elem *e = list_begin (&t->locks_acquired);
+         e != list_end (&t->locks_acquired);
+         e = list_next (e))
+    {
+      struct lock *l = list_entry (e, struct lock, elem);
+      struct list *waiters = &l->semaphore.waiters;
+
+      if(!list_empty (waiters))
+      {
+        for (struct list_elem *f = list_begin (waiters);
+             f != list_end (waiters);
+             f = list_next (f))
+        {
+          struct thread *h = list_entry(f, struct thread, elem);
+          int ep = thread_get_effective_priority(h);
+          if(ep > max_priority)
+            max_priority = ep;
+        }
+      }
+    }
+    
+    return max_priority;
+  }
+  else
+    return t->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -632,9 +660,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->old_priority = priority;
   t->wakeup_at = -1;
   /* t->wakeup's initial value is never used, since whenever the thread will 
-     call timer_sleep this vairable will be changes and it is never used before
+     call timer_sleep this variable will be changes and it is never used before
      that */
   t->magic = THREAD_MAGIC;
+  list_init (&t->locks_acquired);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -662,7 +691,11 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  {
+    struct list_elem *e = list_min (&ready_list, priority_cmp, NULL);
+    list_remove (e);
+    return list_entry (e, struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
