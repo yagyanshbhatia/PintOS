@@ -28,6 +28,11 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of blocked processes.  Processes are added to this list
+   when want to wait for some specified number of timer ticks and
+   removed when their wait time elapses. */
+static struct list sleepers_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -36,6 +41,10 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+
+/* Lock used by thread_block_till(), which is used to gain exclusive 
+   control over sleepers_list. */
+static struct lock sleepers_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -90,8 +99,10 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&sleepers_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleepers_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -250,6 +261,31 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
 }
 
+bool
+before (const struct list_elem *a, const struct list_elem *b,
+        void *aux UNUSED)
+{
+    struct thread *ta = list_entry (a, struct thread, sleepers_elem);
+    struct thread *tb = list_entry (b, struct thread, sleepers_elem);
+
+    return ta->wakeup_at < tb->wakeup_at;
+}
+
+/* Adds the current thread to sleepers_list (gains exclusive access first) and    schedules blocks the current thread. */
+void
+thread_block_till (int64_t wakeup_at)
+{
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+
+  lock_acquire (&sleepers_lock);
+  list_insert_ordered (&sleepers_list, &cur->sleepers_elem, before, NULL);
+  old_level = intr_disable ();
+  lock_release (&sleepers_lock);
+  thread_block ();
+  intr_set_level (old_level);
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -341,12 +377,13 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* TODO::*/
 /* There is scope of modularizing this code by making getter and setter
-functions for old_priority */
+   functions for old_priority */
 
 /* Temporarily increases the priority of the running thread to PRI_MAX,
-after which it might want to change a locked resource and the thread
-wants that change to happen in minimum number of reschduling ticks, while not
-blocking interrupts so that other threads can also be scheduled in between */
+   after which it might want to change a locked resource and the thread
+   wants that change to happen in minimum number of reschduling ticks, while 
+   not blocking interrupts so that other threads can also be 
+   scheduled in between */
 void
 thread_priority_temporarily_up()
 {
@@ -356,7 +393,7 @@ thread_priority_temporarily_up()
 }
 
 /* Restores the old priority of a thread which would have sometime increased
-its priority temporarily */
+   its priority temporarily */
 void
 thread_priority_restore()
 {
@@ -494,6 +531,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->old_priority = priority;
+  t->wakeup_at = -1;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
