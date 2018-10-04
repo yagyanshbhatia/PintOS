@@ -144,6 +144,9 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+bool priority_cmp (const struct list_elem*, const struct list_elem*, void*);
+bool before (const struct list_elem*, const struct list_elem*, void*);
+
 void thread_priority_temporarily_up ();
 void thread_priority_restore ();
 

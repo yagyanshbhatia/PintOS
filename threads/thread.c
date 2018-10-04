@@ -244,6 +244,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  /* We should yield to the added thread if it has a higher priority than
+     the current thread.*/
+  thread_yield ();
 
   return tid;
 }
@@ -257,7 +261,8 @@ priority_cmp (const struct list_elem *a, const struct list_elem *b,
   struct thread *ta = list_entry (a, struct thread, elem);
   struct thread *tb = list_entry (b, struct thread, elem);
 
-  return ta->priority > tb->priority;
+  return thread_get_effective_priority (ta) >
+    thread_get_effective_priority (tb);
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -499,6 +504,14 @@ int
 thread_get_priority (void) 
 {
   return thread_current ()->priority;
+}
+
+/* TODO::
+   Return effective priroty (after donation). */
+int
+thread_get_effective_priority (struct thread *t)
+{
+  return t->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
