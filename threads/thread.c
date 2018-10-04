@@ -33,6 +33,9 @@ static struct list all_list;
    removed when their wait time elapses. */
 static struct list sleepers_list;
 
+/* Stores the next wake up tick time. */
+static int64_t next_wakeup_at;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -41,10 +44,6 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
-
-/* Lock used by thread_block_till(), which is used to gain exclusive 
-   control over sleepers_list. */
-static struct lock sleepers_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -99,10 +98,10 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  lock_init (&sleepers_lock);
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleepers_list);
+  next_wakeup_at = -1;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -271,17 +270,19 @@ before (const struct list_elem *a, const struct list_elem *b,
     return ta->wakeup_at < tb->wakeup_at;
 }
 
-/* Adds the current thread to sleepers_list (gains exclusive access first) and    schedules blocks the current thread. */
+/* Adds the current thread to sleepers_list (first diables interrupts so that
+it is not preempted) and schedules blocks the current thread. */
 void
 thread_block_till (int64_t wakeup_at)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-
-  lock_acquire (&sleepers_lock);
-  list_insert_ordered (&sleepers_list, &cur->sleepers_elem, before, NULL);
   old_level = intr_disable ();
-  lock_release (&sleepers_lock);
+  
+  if (next_wakeup_at == -1 || wakeup_at < next_wakeup_at)
+    next_wakeup_at = wakeup_at;
+
+  list_insert_ordered (&sleepers_list, &cur->sleepers_elem, before, NULL);
   thread_block ();
   intr_set_level (old_level);
 }
